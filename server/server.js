@@ -6,6 +6,7 @@ const bodyParser = require("body-parser");
 const _ = require("lodash");
 const cors = require("cors");
 const path = require("path");
+const { body, check, validationResult } = require("express-validator/check");
 
 const { mongoose } = require("./db/db");
 const { Recipe } = require("./model/recipe");
@@ -87,6 +88,13 @@ app.post(
     recipe
       .save()
       .then(recipe => {
+        return User.findById(recipe._creator);
+      })
+      .then(user => {
+        user.recipes.push(recipe);
+        return user.save();
+      })
+      .then(result => {
         res.status(201).json({
           recipe
         });
@@ -133,6 +141,13 @@ app.patch(
       imgPath = recipeData.imgPath;
     }
 
+    //const ingredients = [];
+    //recipeData.ingredients.forEach(ingredient => {
+    //  ingredients.push({
+    //    _id: ingredient._id || mongoose.Schema.Types.ObjectId(),
+    //    name: ingredient.name
+    //  });
+    //});
     const recipe = {
       title: recipeData.title,
       description: recipeData.description,
@@ -200,16 +215,30 @@ app.patch(
 app.delete("/recipes/:id", authenticate, (req, res) => {
   const id = req.params.id;
 
-  Recipe.deleteOne({
+  Recipe.findOne({
     _id: id,
     _creator: req.user._id
   })
+    // Recipe.deleteOne({
+    //   _id: id,
+    //   _creator: req.user._id
+    // })
     .then(recipe => {
       if (!recipe) {
         const error = new Error("Recipe not found");
         error.statusCode = 404;
         throw error;
       }
+      return Recipe.findByIdAndDelete(recipe._id);
+    })
+    .then(result => {
+      return User.findById(req.user._id);
+    })
+    .then(user => {
+      recipes.pull(id);
+      return user.save();
+    })
+    .then(result => {
       res.status(200).json({
         recipe
       });
@@ -221,40 +250,73 @@ app.delete("/recipes/:id", authenticate, (req, res) => {
     });
 });
 
-app.post("/users", (req, res) => {
-  const body = _.pick(req.body, ["email", "password"]);
-  const user = new User(body);
+app.post(
+  "/users",
+  [
+    // username must be an email
+    body("email")
+      .isEmail()
+      .withMessage("Please enter a valid email")
+      .custom(value => {
+        return User.findOne({ email: value }).then(user => {
+          if (user) {
+            return Promise.reject("Email already exists");
+          }
+        });
+      })
+  ],
+  (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      // errors.throw();
+      console.log();
 
-  user
-    .save()
-    .then(() => {
-      res.status(200).json({
-        user
+      const error = new Error("Validation failed!");
+      error.statusCode = 422;
+      error.data = errors.array();
+      error.message = errors
+        .array()
+        .map(entry => entry.msg)
+        .join(" ");
+      throw error;
+    }
+
+    const body = _.pick(req.body, ["email", "password"]);
+    const user = new User(body);
+    user
+      .save()
+      .then(() => {
+        return res.status(200).json({
+          user
+        });
+      })
+      .catch(e => {
+        if (e.statusCode) {
+          res.status(e.statusCode).send(e);
+        } else {
+          return res.status(400).send(e);
+        }
       });
-    })
-    .catch(e => {
-      console.log(e);
-      res.status(400).send();
-    });
-});
+  }
+);
 
 app.post("/users/login", (req, res) => {
   const body = _.pick(req.body, ["email", "password"]);
 
-  User.findByCredentials(body.email, body.password).then(user => {
-    return user
-      .genAuthToken()
-      .then(token => {
+  User.findByCredentials(body.email, body.password)
+    .then(user => {
+      return user.genAuthToken().then(token => {
         res.header("Authorization", token).send({
           token,
           user
         });
-      })
-  }).catch(e => {
-    res.status(404).json({
-      message: e.message
+      });
+    })
+    .catch(e => {
+      res.status(404).json({
+        message: e
+      });
     });
-  });;
 });
 
 app.delete("/users/me/token", authenticate, (req, res) => {
@@ -267,6 +329,15 @@ app.delete("/users/me/token", authenticate, (req, res) => {
       res.status(400).send();
     }
   );
+});
+
+app.use((error, req, res, next) => {
+  console.log(error);
+  const status = error.statusCode || 500;
+  const message = error.message;
+  const data = error.data;
+
+  res.status(status).send({ status, message, data });
 });
 
 app.listen(port, () => {

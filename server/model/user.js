@@ -32,6 +32,12 @@ const UserSchema = new mongoose.Schema({
       }
     }
   ],
+  recipes: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Recipe'
+    }
+  ],
   tokens: [
     {
       access: {
