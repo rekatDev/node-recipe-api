@@ -21,7 +21,9 @@ const storage = multer.diskStorage({
     cb(null, "images");
   },
   filename: (req, file, cb) => {
-    const filename = new Date().toISOString() + "-" + file.originalname;
+    const filename =
+      new Date().toISOString().replace(/:/g, "-") + "-" + file.originalname;
+    console.log(filename);
     cb(null, filename);
   }
 });
@@ -32,6 +34,7 @@ const fileFilter = (req, file, cb) => {
     file.mimetype === "image/png" ||
     file.mimetype === "image/jpeg"
   ) {
+    console.log(true);
     cb(null, true);
   } else {
     cb(null, false);
@@ -214,7 +217,7 @@ app.patch(
 
 app.delete("/recipes/:id", authenticate, (req, res) => {
   const id = req.params.id;
-
+  let deletedRecipe;
   Recipe.findOne({
     _id: id,
     _creator: req.user._id
@@ -229,22 +232,24 @@ app.delete("/recipes/:id", authenticate, (req, res) => {
         error.statusCode = 404;
         throw error;
       }
+      deletedRecipe = recipe;
       return Recipe.findByIdAndDelete(recipe._id);
     })
     .then(result => {
       return User.findById(req.user._id);
     })
     .then(user => {
-      recipes.pull(id);
+      user.recipes.pull(id);
       return user.save();
     })
     .then(result => {
       res.status(200).json({
-        recipe
+        recipe: deletedRecipe
       });
     })
     .catch(e => {
-      res.status(e.statusCode).json({
+      console.log(e);
+      res.status(e.statusCode || 500).json({
         message: e.message
       });
     });
@@ -268,9 +273,6 @@ app.post(
   (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      // errors.throw();
-      console.log();
-
       const error = new Error("Validation failed!");
       error.statusCode = 422;
       error.data = errors.array();
