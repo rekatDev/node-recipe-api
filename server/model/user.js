@@ -5,6 +5,13 @@ const bcrypt = require("bcryptjs");
 const _ = require("lodash");
 
 const UserSchema = new mongoose.Schema({
+  username: {
+    type: String,
+    required: true,
+    trim: 1,
+    unique: true,
+    minlength: 3
+  },
   email: {
     type: String,
     required: true,
@@ -35,7 +42,7 @@ const UserSchema = new mongoose.Schema({
   recipes: [
     {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Recipe'
+      ref: "Recipe"
     }
   ],
   tokens: [
@@ -54,8 +61,14 @@ const UserSchema = new mongoose.Schema({
 UserSchema.methods.toJSON = function() {
   const user = this;
   const userObject = user.toObject();
-
-  return _.pick(userObject, ["email", "_id", "shoppingList"]);
+  const returnObject = _.pick(userObject, [
+    "email",
+    "_id",
+    "shoppingList",
+    "username"
+  ]);
+  console.log(returnObject);
+  return returnObject;
 };
 
 UserSchema.methods.genAuthToken = function() {
@@ -76,15 +89,15 @@ UserSchema.methods.genAuthToken = function() {
 };
 
 UserSchema.methods.removeToken = function(token) {
-    const user = this;
+  const user = this;
 
-    return user.updateOne({
-        $pull: {
-            tokens: {
-                token: token
-            }
-        }
-    });
+  return user.updateOne({
+    $pull: {
+      tokens: {
+        token: token
+      }
+    }
+  });
 };
 
 UserSchema.statics.findByToken = function(token) {

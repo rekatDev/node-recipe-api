@@ -1,5 +1,6 @@
 require("./config/config");
 
+const fs = require("fs");
 const express = require("express");
 const multer = require("multer");
 const bodyParser = require("body-parser");
@@ -23,7 +24,6 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => {
     const filename =
       new Date().toISOString().replace(/:/g, "-") + "-" + file.originalname;
-    console.log(filename);
     cb(null, filename);
   }
 });
@@ -34,7 +34,6 @@ const fileFilter = (req, file, cb) => {
     file.mimetype === "image/png" ||
     file.mimetype === "image/jpeg"
   ) {
-    console.log(true);
     cb(null, true);
   } else {
     cb(null, false);
@@ -60,16 +59,19 @@ app.use((req, res, next) => {
 });
 
 app.get("/recipes", (req, res) => {
-  Recipe.find().then(
-    recipes => {
-      res.status(200).json({
-        recipes
-      });
-    },
-    err => {
-      res.status(400).send();
-    }
-  );
+  Recipe.find()
+    .populate("_creator")
+    .then(
+      recipes => {
+        console.log(recipes);
+        res.status(200).json({
+          recipes
+        });
+      },
+      err => {
+        res.status(400).send();
+      }
+    );
 });
 
 app.post(
@@ -112,6 +114,7 @@ app.get("/recipes/:id", (req, res) => {
   const id = req.params.id;
 
   Recipe.findById(id)
+    .populate("_creator")
     .then(recipe => {
       if (!recipe) {
         const error = new Error("Recipe not found");
@@ -165,7 +168,9 @@ app.patch(
           error.statusCode = 404;
           throw error;
         }
-        console.log(recipeData.ingredients);
+        if (recipe.imgPath !== recipeData.imgPath) {
+          clearImage(recipe.imgPath);
+        }
         recipe.title = recipeData.title;
         recipe.description = recipeData.description;
         recipe.imgPath = imgPath;
@@ -236,6 +241,7 @@ app.delete("/recipes/:id", authenticate, (req, res) => {
       return Recipe.findByIdAndDelete(recipe._id);
     })
     .then(result => {
+      clearImage(result.imgPath);
       return User.findById(req.user._id);
     })
     .then(user => {
@@ -268,6 +274,16 @@ app.post(
             return Promise.reject("Email already exists");
           }
         });
+      }),
+    body("username")
+      .not()
+      .isEmpty()
+      .custom(value => {
+        return User.findOne({ username: value }).then(user => {
+          if (user) {
+            return Promise.reject("Username already exists");
+          }
+        });
       })
   ],
   (req, res) => {
@@ -283,7 +299,7 @@ app.post(
       throw error;
     }
 
-    const body = _.pick(req.body, ["email", "password"]);
+    const body = _.pick(req.body, ["email", "password", "username"]);
     const user = new User(body);
     user
       .save()
@@ -325,7 +341,10 @@ app.delete("/users/me/token", authenticate, (req, res) => {
   const user = req.user;
   user.removeToken(req.token).then(
     user => {
-      res.send();
+      res.send({
+        email: user.email,
+        username: user.username
+      });
     },
     err => {
       res.status(400).send();
@@ -345,3 +364,11 @@ app.use((error, req, res, next) => {
 app.listen(port, () => {
   console.log(`Server started on port ${port}`);
 });
+
+const clearImage = filePath => {
+  const array = filePath.split(path.sep);
+  const index = array.indexOf("images");
+  filePath = path.join(__dirname, "..", array[index], array[index + 1]);
+
+  fs.unlink(filePath, err => console.log(err));
+};
