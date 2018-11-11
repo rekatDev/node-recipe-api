@@ -32,10 +32,6 @@ const UserSchema = new mongoose.Schema({
       name: {
         type: String,
         required: true
-      },
-      amount: {
-        type: Number,
-        required: true
       }
     }
   ],
@@ -67,7 +63,6 @@ UserSchema.methods.toJSON = function() {
     "shoppingList",
     "username"
   ]);
-  console.log(returnObject);
   return returnObject;
 };
 

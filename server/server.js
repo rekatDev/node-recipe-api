@@ -63,7 +63,6 @@ app.get("/recipes", (req, res) => {
     .populate("_creator")
     .then(
       recipes => {
-        console.log(recipes);
         res.status(200).json({
           recipes
         });
@@ -332,9 +331,15 @@ app.post("/users/login", (req, res) => {
     })
     .catch(e => {
       res.status(404).json({
-        message: e
+        e
       });
     });
+});
+
+app.get("/users/me", authenticate, (req, res) => {
+  const user = req.user;
+
+  res.status(200).send(user);
 });
 
 app.delete("/users/me/token", authenticate, (req, res) => {
@@ -350,6 +355,25 @@ app.delete("/users/me/token", authenticate, (req, res) => {
       res.status(400).send();
     }
   );
+});
+
+app.get("/users/me/shoppinglist", authenticate, (req, res) => {
+  const user = req.user;
+
+  res.send({
+    shoppingList: user.shoppingList
+  });
+});
+
+app.patch("/users/me/shoppingList", authenticate, (req, res) => {
+  const shoppingList = req.body;
+  const user = req.user;
+  user.shoppingList = shoppingList;
+
+  user.save().then(() => {
+    res.send();
+  });
+  // add shopping list to user!
 });
 
 app.use((error, req, res, next) => {
